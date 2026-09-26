@@ -1,0 +1,9 @@
+torch
+transformers
+datasets
+numpy
+matplotlib
+tensorboard
+pyyaml
+pytest
+ipykernel

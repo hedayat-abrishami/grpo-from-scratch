@@ -1,0 +1,20 @@
+# Private planning notes
+notes/
+
+# Environment
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.ipynb_checkpoints/
+.DS_Store
+
+# Training outputs
+runs/
+checkpoints/
+wandb/
+*.pt
+*.safetensors
+
+# Local Hugging Face cache, if HF_HOME is pointed here
+.cache/
