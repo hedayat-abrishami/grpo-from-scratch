@@ -8,6 +8,7 @@ __pycache__/
 .pytest_cache/
 .ipynb_checkpoints/
 .DS_Store
+colab.ipynb
 
 # Training outputs
 runs/

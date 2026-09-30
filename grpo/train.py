@@ -1,4 +1,5 @@
 import random
+import time
 
 import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
@@ -32,8 +33,9 @@ def main():
 
     for step in range(STEPS):
         optimizer.zero_grad()
+        t0 = time.time()
         all_rewards, all_trunc, all_len, n_signal, total_loss = [], [], [], 0, 0.0
-                
+
         for _ in range(B):
             ex = random.choice(train)
 
@@ -67,7 +69,7 @@ def main():
         r = torch.cat(all_rewards)
         print(f"step {step:3d} | reward {r.mean():.3f} | acc {(r >= 1).float().mean():.3f} "
             f"| loss {total_loss:+.4f} | grad {grad_norm:.2f} | len {torch.cat(all_len).mean():.0f} "
-            f"| trunc {torch.cat(all_trunc).mean():.2f} | signal {n_signal}/{B}")
+            f"| trunc {torch.cat(all_trunc).mean():.2f} | signal {n_signal}/{B} | {time.time() - t0:.0f}s")
 
 
 if __name__ == "__main__":
