@@ -28,12 +28,9 @@ def sample_group(model, tokenizer, question, G, max_new_tokens):
 
 def token_logprobs(model, prompt_ids, completions):
     """Log-prob of each completion token under `model`. Shape (G, completion_len)."""
-    G = completions.shape[0]
-    prompt_len = prompt_ids.shape[1]
-
+    G, L = completions.shape
     full = torch.cat([prompt_ids.repeat(G, 1), completions], dim=1)
-    logits = model(full).logits
 
-    logits = logits[:, prompt_len - 1: -1]
-    logp = torch.log_softmax(logits.float(), dim=-1)
-    return logp.gather(2, completions.unsqueeze(-1)).squeeze(-1)
+    logits = model(full, logits_to_keep=L+1).logits[:, :-1].float()
+    chosen = logits.gather(2, completions.unsqueeze(-1)).squeeze(-1)
+    return chosen - torch.logsumexp(logits, dim=-1)
