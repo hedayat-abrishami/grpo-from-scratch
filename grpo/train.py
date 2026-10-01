@@ -1,65 +1,127 @@
+import argparse
+import os
 import random
 import time
+from dataclasses import asdict, dataclass, fields
 
 import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
+from grpo.checkpoint import checkpoint_path, load_checkpoint, save_checkpoint
 from grpo.data import load_gsm8k
+from grpo.eval import evaluate
 from grpo.loss import advantages, grpo_loss
 from grpo.reward import reward
 from grpo.sampling import sample_group, token_logprobs
 from grpo.utils import get_device, seed_everything
 
-MODEL = "HuggingFaceTB/SmolLM2-135M-Instruct"
-G = 4
-STEPS = 12
-MAX_NEW_TOKENS = 256
-LR = 1e-6
-EPS = 0.2
-BETA = 0.04
-B = 4
+
+@dataclass
+class Config:
+    model: str = "HuggingFaceTB/SmolLM2-135M-Instruct"
+    G: int = 4                      # completions per question
+    B: int = 4                      # questions per optimizer step
+    steps: int = 12
+    max_new_tokens: int = 256
+    lr: float = 1e-6
+    eps: float = 0.2
+    beta: float = 0.04
+    seed: int = 0
+    device: str = ""                # "" = auto (cuda > mps > cpu)
+    run_name: str = "debug"
+    ckpt_dir: str = ""              # "" = no checkpoints
+    ckpt_every: int = 25
+    eval_every: int = 50            # 0 = no eval
+    eval_n: int = 100               # first N test questions, the same every time
+    wandb: bool = False
+    wandb_project: str = "grpo-from-scratch"
+
+
+def parse_args():
+    parser = argparse.ArgumentParser()
+    for f in fields(Config):
+        if f.type is bool:
+            parser.add_argument(f"--{f.name}", action="store_true")
+        else:
+            parser.add_argument(f"--{f.name}", type=f.type, default=f.default)
+    return Config(**vars(parser.parse_args()))
 
 
 def main():
-    seed_everything(0)
-    device = get_device()
-    tok = AutoTokenizer.from_pretrained(MODEL)
-    model = AutoModelForCausalLM.from_pretrained(MODEL, dtype=torch.float32).to(device)
-    ref_model = AutoModelForCausalLM.from_pretrained(MODEL, dtype=torch.float32).to(device)
+    cfg = parse_args()
+    seed_everything(cfg.seed)
+    device = get_device(cfg.device or None)
+    tok = AutoTokenizer.from_pretrained(cfg.model)
+    model = AutoModelForCausalLM.from_pretrained(cfg.model, dtype=torch.float32).to(device)
+    ref_model = AutoModelForCausalLM.from_pretrained(cfg.model, dtype=torch.float32).to(device)
     ref_model.eval()
     ref_model.requires_grad_(False)
-    optimizer = torch.optim.AdamW(model.parameters(), lr=LR)
+    optimizer = torch.optim.AdamW(model.parameters(), lr=cfg.lr)
     train = load_gsm8k("train")
+    eval_set = load_gsm8k("test")[: cfg.eval_n]
 
-    for step in range(STEPS):
+    # Resume if this run already has a checkpoint.
+    start_step, wandb_id = 0, None
+    ckpt = checkpoint_path(cfg.ckpt_dir, cfg.run_name) if cfg.ckpt_dir else None
+    if ckpt and os.path.exists(ckpt):
+        start_step, wandb_id = load_checkpoint(ckpt, model, optimizer, device)
+        print(f"resumed from {ckpt} at step {start_step}")
+
+    if cfg.wandb:
+        import wandb
+        wandb_id = wandb_id or wandb.util.generate_id()
+        wandb.init(project=cfg.wandb_project, name=cfg.run_name, id=wandb_id, resume="allow", config=asdict(cfg))
+
+    def log(metrics, step):
+        if cfg.wandb:
+            wandb.log(metrics, step=step)
+
+    def run_eval(step):
+        t0 = time.time()
+        metrics, samples = evaluate(model, tok, eval_set, cfg.max_new_tokens)
+        print(f"eval @ step {step} | acc {metrics['eval/accuracy']:.3f} | format {metrics['eval/format_rate']:.3f} "
+              f"| trunc {metrics['eval/truncated']:.2f} | {time.time() - t0:.0f}s")
+        if cfg.wandb:
+            metrics["eval/samples"] = wandb.Table(
+                columns=["question", "answer", "predicted", "reward", "completion"], data=samples)
+        log(metrics, step)
+
+    if cfg.eval_every and start_step == 0:
+        run_eval(0)
+
+    for step in range(start_step, cfg.steps):
         optimizer.zero_grad()
         t0 = time.time()
-        all_rewards, all_trunc, all_len, n_signal, total_loss = [], [], [], 0, 0.0
+        all_rewards, all_trunc, all_len, all_kl, n_signal, total_loss = [], [], [], [], 0, 0.0
 
-        for _ in range(B):
+        for _ in range(cfg.B):
             ex = random.choice(train)
 
             # 1. sample a group
             model.eval()
             with torch.no_grad():
-                prompt_ids, completions, mask, truncated = sample_group(model, tok, ex["question"], G, MAX_NEW_TOKENS)
-                texts = [tok.decode(completions[i][mask[i]], skip_special_tokens=True) for i in range(G)]
+                prompt_ids, completions, mask, truncated = sample_group(model, tok, ex["question"], cfg.G, cfg.max_new_tokens)
+                texts = [tok.decode(completions[i][mask[i]], skip_special_tokens=True) for i in range(cfg.G)]
                 rewards = torch.tensor([reward(t, ex["answer"]) for t in texts], device=device)
                 adv = advantages(rewards)
                 old_lp = token_logprobs(model, prompt_ids, completions)
                 ref_lp = token_logprobs(ref_model, prompt_ids, completions)
 
-            # 2. one gradient step
+            # 2. accumulate the gradient for this question
             new_lp = token_logprobs(model, prompt_ids, completions)
             max_dev = (torch.exp(new_lp - old_lp) - 1)[mask].abs().max().item()
             assert max_dev < 1e-3, f"rho != 1 before update: {max_dev}"
 
-            loss = grpo_loss(new_lp, old_lp, ref_lp, adv, mask, EPS, BETA) / B
+            loss = grpo_loss(new_lp, old_lp, ref_lp, adv, mask, cfg.eps, cfg.beta) / cfg.B
             loss.backward()
 
+            with torch.no_grad():
+                d = ref_lp - new_lp
+                kl = ((torch.exp(d) - d - 1) * mask).sum() / mask.sum()
             all_rewards.append(rewards)
             all_trunc.append(truncated.float())
             all_len.append(mask.sum(1).float())
+            all_kl.append(kl.item())
             n_signal += int(rewards.std() > 0)
             total_loss += loss.item()
 
@@ -67,9 +129,33 @@ def main():
         optimizer.step()
 
         r = torch.cat(all_rewards)
-        print(f"step {step:3d} | reward {r.mean():.3f} | acc {(r >= 1).float().mean():.3f} "
-            f"| loss {total_loss:+.4f} | grad {grad_norm:.2f} | len {torch.cat(all_len).mean():.0f} "
-            f"| trunc {torch.cat(all_trunc).mean():.2f} | signal {n_signal}/{B} | {time.time() - t0:.0f}s")
+        metrics = {
+            "train/reward": r.mean().item(),
+            "train/accuracy": (r >= 1).float().mean().item(),
+            "train/format_rate": (r > 0).float().mean().item(),
+            "train/loss": total_loss,
+            "train/grad_norm": grad_norm.item(),
+            "train/length": torch.cat(all_len).mean().item(),
+            "train/truncated": torch.cat(all_trunc).mean().item(),
+            "train/signal_frac": n_signal / cfg.B,
+            "train/kl": sum(all_kl) / len(all_kl),
+            "time/step_s": time.time() - t0,
+        }
+        print(f"step {step:3d} | reward {metrics['train/reward']:.3f} | acc {metrics['train/accuracy']:.3f} "
+              f"| loss {total_loss:+.4f} | grad {metrics['train/grad_norm']:.2f} | len {metrics['train/length']:.0f} "
+              f"| trunc {metrics['train/truncated']:.2f} | signal {n_signal}/{cfg.B} | kl {metrics['train/kl']:.2e} "
+              f"| {metrics['time/step_s']:.0f}s")
+        log(metrics, step + 1)
+
+        done = step + 1
+        if cfg.eval_every and (done % cfg.eval_every == 0 or done == cfg.steps):
+            run_eval(done)
+        if ckpt and (done % cfg.ckpt_every == 0 or done == cfg.steps):
+            save_checkpoint(ckpt, model, optimizer, done, asdict(cfg), wandb_id)
+            print(f"saved checkpoint at step {done}")
+
+    if cfg.wandb:
+        wandb.finish()
 
 
 if __name__ == "__main__":

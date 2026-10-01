@@ -1,0 +1,57 @@
+"""Save and resume training state: model, optimizer, step, RNG state, W&B run id."""
+
+import os
+import random
+
+import numpy as np
+import torch
+
+
+def checkpoint_path(ckpt_dir, run_name):
+    return os.path.join(ckpt_dir, run_name, "latest.pt")
+
+
+def _rng_state():
+    state = {
+        "python": random.getstate(),
+        "numpy": np.random.get_state(),
+        "torch": torch.get_rng_state(),
+    }
+    if torch.cuda.is_available():
+        state["cuda"] = torch.cuda.get_rng_state_all()
+    return state
+
+
+def _set_rng_state(state):
+    random.setstate(state["python"])
+    np.random.set_state(state["numpy"])
+    torch.set_rng_state(state["torch"])
+    if "cuda" in state and torch.cuda.is_available():
+        torch.cuda.set_rng_state_all(state["cuda"])
+
+
+def save_checkpoint(path, model, optimizer, step, config, wandb_id):
+    """Write to a temp file, then rename, so a disconnect mid-save can't corrupt the last good checkpoint."""
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    tmp = path + ".tmp"
+    torch.save(
+        {
+            "model": model.state_dict(),
+            "optimizer": optimizer.state_dict(),
+            "step": step,
+            "config": config,
+            "rng": _rng_state(),
+            "wandb_id": wandb_id,
+        },
+        tmp,
+    )
+    os.replace(tmp, path)
+
+
+def load_checkpoint(path, model, optimizer, device):
+    """Restore model, optimizer and RNG state in place. Returns (next_step, wandb_id)."""
+    ckpt = torch.load(path, map_location=device, weights_only=False)
+    model.load_state_dict(ckpt["model"])
+    optimizer.load_state_dict(ckpt["optimizer"])
+    _set_rng_state(ckpt["rng"])
+    return ckpt["step"], ckpt["wandb_id"]
