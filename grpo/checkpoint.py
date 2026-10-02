@@ -23,11 +23,12 @@ def _rng_state():
 
 
 def _set_rng_state(state):
+    # RNG states must be CPU ByteTensors, even when the checkpoint was loaded onto the GPU.
     random.setstate(state["python"])
     np.random.set_state(state["numpy"])
-    torch.set_rng_state(state["torch"])
+    torch.set_rng_state(state["torch"].cpu())
     if "cuda" in state and torch.cuda.is_available():
-        torch.cuda.set_rng_state_all(state["cuda"])
+        torch.cuda.set_rng_state_all([s.cpu() for s in state["cuda"]])
 
 
 def save_checkpoint(path, model, optimizer, step, config):
