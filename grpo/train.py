@@ -117,7 +117,7 @@ def main():
             all_trunc.append(truncated.float())
             all_len.append(mask.sum(1).float())
             all_kl.append(kl.item())
-            n_signal += int(rewards.std() > 0)
+            n_signal += int(rewards.std() > 1e-6)
             total_loss += loss.item()
 
         grad_norm = torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
