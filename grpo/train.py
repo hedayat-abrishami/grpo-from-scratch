@@ -10,6 +10,7 @@ from transformers import AutoModelForCausalLM, AutoTokenizer
 from grpo.checkpoint import checkpoint_path, load_checkpoint, save_checkpoint
 from grpo.data import load_gsm8k
 from grpo.eval import evaluate
+from grpo.logger import CSVLogger, log_samples
 from grpo.loss import advantages, grpo_loss
 from grpo.reward import reward
 from grpo.sampling import sample_group, token_logprobs
@@ -29,12 +30,10 @@ class Config:
     seed: int = 0
     device: str = ""                # "" = auto (cuda > mps > cpu)
     run_name: str = "debug"
-    ckpt_dir: str = ""              # "" = no checkpoints
+    ckpt_dir: str = ""              # "" = no checkpoints; logs then go to runs/<run_name>
     ckpt_every: int = 25
     eval_every: int = 50            # 0 = no eval
     eval_n: int = 100               # first N test questions, the same every time
-    wandb: bool = False
-    wandb_project: str = "grpo-from-scratch"
 
 
 def parse_args():
@@ -61,30 +60,26 @@ def main():
     eval_set = load_gsm8k("test")[: cfg.eval_n]
 
     # Resume if this run already has a checkpoint.
-    start_step, wandb_id = 0, None
+    start_step = 0
     ckpt = checkpoint_path(cfg.ckpt_dir, cfg.run_name) if cfg.ckpt_dir else None
     if ckpt and os.path.exists(ckpt):
-        start_step, wandb_id = load_checkpoint(ckpt, model, optimizer, device)
+        start_step = load_checkpoint(ckpt, model, optimizer, device)
         print(f"resumed from {ckpt} at step {start_step}")
 
-    if cfg.wandb:
-        import wandb
-        wandb_id = wandb_id or wandb.util.generate_id()
-        wandb.init(project=cfg.wandb_project, name=cfg.run_name, id=wandb_id, resume="allow", config=asdict(cfg))
-
-    def log(metrics, step):
-        if cfg.wandb:
-            wandb.log(metrics, step=step)
+    # Logs live next to the checkpoint, so they survive a Colab disconnect along with it.
+    run_dir = os.path.join(cfg.ckpt_dir or "runs", cfg.run_name)
+    resume = start_step if start_step > 0 else None
+    train_log = CSVLogger(os.path.join(run_dir, "metrics.csv"), resume)
+    eval_log = CSVLogger(os.path.join(run_dir, "eval.csv"), resume)
+    print(f"logging to {run_dir}")
 
     def run_eval(step):
         t0 = time.time()
         metrics, samples = evaluate(model, tok, eval_set, cfg.max_new_tokens)
         print(f"eval @ step {step} | acc {metrics['eval/accuracy']:.3f} | format {metrics['eval/format_rate']:.3f} "
               f"| trunc {metrics['eval/truncated']:.2f} | {time.time() - t0:.0f}s")
-        if cfg.wandb:
-            metrics["eval/samples"] = wandb.Table(
-                columns=["question", "answer", "predicted", "reward", "completion"], data=samples)
-        log(metrics, step)
+        eval_log.log(metrics, step)
+        log_samples(os.path.join(run_dir, "eval_samples.jsonl"), step, samples)
 
     if cfg.eval_every and start_step == 0:
         run_eval(0)
@@ -145,17 +140,13 @@ def main():
               f"| loss {total_loss:+.4f} | grad {metrics['train/grad_norm']:.2f} | len {metrics['train/length']:.0f} "
               f"| trunc {metrics['train/truncated']:.2f} | signal {n_signal}/{cfg.B} | kl {metrics['train/kl']:.2e} "
               f"| {metrics['time/step_s']:.0f}s")
-        log(metrics, step + 1)
-
         done = step + 1
+        train_log.log(metrics, done)
         if cfg.eval_every and (done % cfg.eval_every == 0 or done == cfg.steps):
             run_eval(done)
         if ckpt and (done % cfg.ckpt_every == 0 or done == cfg.steps):
-            save_checkpoint(ckpt, model, optimizer, done, asdict(cfg), wandb_id)
+            save_checkpoint(ckpt, model, optimizer, done, asdict(cfg))
             print(f"saved checkpoint at step {done}")
-
-    if cfg.wandb:
-        wandb.finish()
 
 
 if __name__ == "__main__":

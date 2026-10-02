@@ -7,4 +7,3 @@ tensorboard
 pyyaml
 pytest
 ipykernel
-wandb

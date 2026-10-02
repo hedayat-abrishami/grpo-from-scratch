@@ -1,4 +1,4 @@
-"""Save and resume training state: model, optimizer, step, RNG state, W&B run id."""
+"""Save and resume training state: model, optimizer, step, RNG state."""
 
 import os
 import random
@@ -30,7 +30,7 @@ def _set_rng_state(state):
         torch.cuda.set_rng_state_all(state["cuda"])
 
 
-def save_checkpoint(path, model, optimizer, step, config, wandb_id):
+def save_checkpoint(path, model, optimizer, step, config):
     """Write to a temp file, then rename, so a disconnect mid-save can't corrupt the last good checkpoint."""
     os.makedirs(os.path.dirname(path), exist_ok=True)
     tmp = path + ".tmp"
@@ -41,7 +41,6 @@ def save_checkpoint(path, model, optimizer, step, config, wandb_id):
             "step": step,
             "config": config,
             "rng": _rng_state(),
-            "wandb_id": wandb_id,
         },
         tmp,
     )
@@ -49,9 +48,9 @@ def save_checkpoint(path, model, optimizer, step, config, wandb_id):
 
 
 def load_checkpoint(path, model, optimizer, device):
-    """Restore model, optimizer and RNG state in place. Returns (next_step, wandb_id)."""
+    """Restore model, optimizer and RNG state in place. Returns the next step to run."""
     ckpt = torch.load(path, map_location=device, weights_only=False)
     model.load_state_dict(ckpt["model"])
     optimizer.load_state_dict(ckpt["optimizer"])
     _set_rng_state(ckpt["rng"])
-    return ckpt["step"], ckpt["wandb_id"]
+    return ckpt["step"]
