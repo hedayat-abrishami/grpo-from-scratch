@@ -1,0 +1,17 @@
+{
+  "model": "Qwen/Qwen2.5-0.5B-Instruct",
+  "G": 8,
+  "B": 4,
+  "K": 2,
+  "steps": 300,
+  "max_new_tokens": 256,
+  "lr": 1e-06,
+  "eps": 0.2,
+  "beta": 0.04,
+  "ckpt_every": 25,
+  "eval_every": 50,
+  "eval_n": 100,
+  "clip": "prob_adaptive",
+  "eps_high": 0.28,
+  "c": 2.0
+}

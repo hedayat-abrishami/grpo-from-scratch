@@ -18,7 +18,9 @@ def sample_group(model, tokenizer, question, G, max_new_tokens):
     prompt_len = inputs["input_ids"].shape[1]
     completions = out[:,  prompt_len:]
 
-    is_eos = completions == tokenizer.eos_token_id
+    eos_ids = model.generation_config.eos_token_id
+    eos_ids = torch.tensor(eos_ids if isinstance(eos_ids, list) else [eos_ids], device=device)
+    is_eos = torch.isin(completions, eos_ids)
     has_eos = is_eos.any(dim=1)
     eos_idx = torch.where(has_eos, is_eos.int().argmax(dim=1), completions.shape[1] - 1)
     positions = torch.arange(completions.shape[1], device=device)
@@ -26,11 +28,16 @@ def sample_group(model, tokenizer, question, G, max_new_tokens):
 
     return inputs["input_ids"], completions, mask, ~has_eos
 
-def token_logprobs(model, prompt_ids, completions):
+def token_logprobs(model, prompt_ids, completions, return_entropy=False):
     """Log-prob of each completion token under `model`. Shape (G, completion_len)."""
     G, L = completions.shape
     full = torch.cat([prompt_ids.repeat(G, 1), completions], dim=1)
 
     logits = model(full, logits_to_keep=L+1).logits[:, :-1].float()
     chosen = logits.gather(2, completions.unsqueeze(-1)).squeeze(-1)
-    return chosen - torch.logsumexp(logits, dim=-1)
+    lse = torch.logsumexp(logits, dim=-1)
+    logp = chosen - lse
+    if not return_entropy:
+        return logp, None
+    entropy = lse - (torch.softmax(logits, dim=-1) * logits).sum(-1)  # (G, L), in nats
+    return logp, entropy

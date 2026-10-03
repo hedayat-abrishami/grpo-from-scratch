@@ -13,6 +13,8 @@ def evaluate(model, tokenizer, examples, max_new_tokens, batch_size=16):
     n_correct, n_format, n_trunc = 0, 0, 0
     samples = []
 
+    eos_ids = model.generation_config.eos_token_id
+    eos_ids = torch.tensor(eos_ids if isinstance(eos_ids, list) else [eos_ids], device=model.device)            
     for start in range(0, len(examples), batch_size):
         batch = examples[start : start + batch_size]
         prompts = [build_prompt(tokenizer, ex["question"]) for ex in batch]
@@ -34,7 +36,7 @@ def evaluate(model, tokenizer, examples, max_new_tokens, batch_size=16):
             r = reward(text, ex["answer"])
             n_correct += r >= 1.0
             n_format += r > 0.0
-            n_trunc += not (comp == tokenizer.eos_token_id).any().item()
+            n_trunc += not torch.isin(comp, eos_ids).any().item()   
             if len(samples) < 5:
                 samples.append([ex["question"], ex["answer"], extract_answer(text), r, text])
 

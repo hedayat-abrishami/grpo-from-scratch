@@ -1,0 +1,17 @@
+{
+  "model": "HuggingFaceTB/SmolLM2-135M-Instruct",
+  "G": 8,
+  "B": 4,
+  "K": 1,
+  "steps": 300,
+  "max_new_tokens": 256,
+  "lr": 5e-06,
+  "eps": 0.2,
+  "beta": 0.04,
+  "clip": "symmetric",
+  "eps_high": 0.28,
+  "c": 1.0,
+  "ckpt_every": 25,
+  "eval_every": 50,
+  "eval_n": 100
+}
