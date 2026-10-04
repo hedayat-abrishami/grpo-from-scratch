@@ -1,0 +1,6 @@
+# Dress rehearsal on the rented GPU (~10-15 min): every arm for 3 steps with the real settings (pass --micro_G 0 --tf32
+# on the command line), checkpoints at step 2, and a 20-question final eval. Then check with scripts/check_runs.py.
+rehearsal-a  --config configs/arm_a_symmetric.json   --steps 3 --eval_every 0 --ckpt_every 2 --final_eval_n 20
+rehearsal-b  --config configs/arm_b_clip_higher.json --steps 3 --eval_every 0 --ckpt_every 2 --final_eval_n 20
+rehearsal-c  --config configs/arm_c_adaptive_c1.json --steps 3 --eval_every 0 --ckpt_every 2 --final_eval_n 20
+rehearsal-d  --config configs/arm_d_dcpo.json        --steps 3 --eval_every 0 --ckpt_every 2 --final_eval_n 20

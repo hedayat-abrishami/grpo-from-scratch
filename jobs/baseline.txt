@@ -1,0 +1,2 @@
+# Qwen before any training: greedy pass@1 on all 1,319 test questions, with the arms' exact settings.
+qwen-step0  --config configs/arm_a_symmetric.json --steps 0

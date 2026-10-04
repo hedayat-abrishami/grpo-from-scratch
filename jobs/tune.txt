@@ -1,0 +1,5 @@
+# Tuning on arm A only: short runs at three learning rates. Pick one, then freeze it in all four arm configs.
+# Watch eval accuracy, train/entropy, train/kl and train/kl_max. No final eval, to keep them short.
+tune-lr1e-6  --config configs/arm_a_symmetric.json --steps 50 --eval_every 25 --final_eval_n 0 --lr 1e-6
+tune-lr3e-6  --config configs/arm_a_symmetric.json --steps 50 --eval_every 25 --final_eval_n 0 --lr 3e-6
+tune-lr1e-5  --config configs/arm_a_symmetric.json --steps 50 --eval_every 25 --final_eval_n 0 --lr 1e-5

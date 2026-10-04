@@ -27,6 +27,7 @@ class Config:
     B: int = 4                      # questions per optimizer step
     K: int = 1                      # optimizer updates per batch of rollouts (1 = plain GRPO)
     micro_G: int = 0                # answers per forward/backward chunk (0 = all G at once); lower it if memory runs out
+    tf32: bool = False              # TF32 matmuls on Ampere+ GPUs (A10/A100): much faster; the rho == 1 assert checks precision
     steps: int = 12
     max_new_tokens: int = 256
     lr: float = 1e-6
@@ -96,6 +97,8 @@ def main():
     cfg = parse_args()
     seed_everything(cfg.seed)
     device = get_device(cfg.device or None)
+    if cfg.tf32:
+        torch.set_float32_matmul_precision("high")  # TF32 where the GPU supports it; no effect on a T4, MPS or CPU
     tok = AutoTokenizer.from_pretrained(cfg.model)
     model = AutoModelForCausalLM.from_pretrained(cfg.model, dtype=torch.float32).to(device)
     ref_model = AutoModelForCausalLM.from_pretrained(cfg.model, dtype=torch.float32).to(device)
