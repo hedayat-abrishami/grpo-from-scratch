@@ -30,6 +30,7 @@ class Config:
     steps: int = 12
     max_new_tokens: int = 256
     lr: float = 1e-6
+    weight_decay: float = 0.0       # AdamW decay; 0 so the policy only moves for reward/KL reasons (PyTorch's default is 0.01)
     eps: float = 0.2
     clip: str = "symmetric"         # symmetric | decoupled | prob_adaptive
     eps_high: float = 0.28          # upper clip for "decoupled" (DAPO Clip-Higher)
@@ -100,7 +101,7 @@ def main():
     ref_model = AutoModelForCausalLM.from_pretrained(cfg.model, dtype=torch.float32).to(device)
     ref_model.eval()
     ref_model.requires_grad_(False)
-    optimizer = torch.optim.AdamW(model.parameters(), lr=cfg.lr)
+    optimizer = torch.optim.AdamW(model.parameters(), lr=cfg.lr, weight_decay=cfg.weight_decay)
     train = load_gsm8k("train")
     eval_set = load_gsm8k("test")[: cfg.eval_n]
 
@@ -136,6 +137,7 @@ def main():
     for step in range(start_step, cfg.steps):
         t0 = time.time()
         all_rewards, all_trunc, all_len, all_kl, all_ent, n_signal, total_loss = [], [], [], [], [], 0, 0.0
+        kl_max = 0.0  # largest per-token KL this step: a single token far from the reference can dominate the update
 
         rollouts = []
         for _ in range(cfg.B):
@@ -185,11 +187,13 @@ def main():
                     loss = grpo_loss(new_lp, part["old_lp"], part["ref_lp"], part["adv"], part["mask"],
                                      cfg.eps, cfg.beta, cfg.clip, cfg.eps_high, cfg.c) * (new_lp.shape[0] / G) / cfg.B
                     loss.backward()
+                    with torch.no_grad():
+                        d = (part["ref_lp"] - new_lp).masked_fill(~part["mask"], 0.0)  # padding can't overflow exp
+                        kl_tok = torch.exp(d) - d - 1
+                        kl_max = max(kl_max, kl_tok[part["mask"]].max().item())  # every pass: spikes appear on k >= 1
                     if k == 0:
-                        with torch.no_grad():
-                            d = part["ref_lp"] - new_lp
-                            kl_sum += ((torch.exp(d) - d - 1) * part["mask"]).sum().item()
-                            kl_tokens += part["mask"].sum().item()
+                        kl_sum += kl_tok[part["mask"]].sum().item()
+                        kl_tokens += part["mask"].sum().item()
                         total_loss += loss.item()
                 if k == 0:
                     all_kl.append(kl_sum / kl_tokens)  # mean over all real tokens of the question, as before
@@ -207,6 +211,7 @@ def main():
             "train/truncated": torch.cat(all_trunc).mean().item(),
             "train/signal_frac": n_signal / cfg.B,
             "train/kl": sum(all_kl) / len(all_kl),
+            "train/kl_max": kl_max,
             "train/entropy": sum(all_ent) / len(all_ent),
             **{f"clip/upper_{name}": up / max(n, 1) for name, (n, up, low) in clip_tot.items()},
             **{f"clip/lower_{name}": low / max(n, 1) for name, (n, up, low) in clip_tot.items()},
@@ -214,7 +219,7 @@ def main():
         }
         print(f"step {step:3d} | reward {metrics['train/reward']:.3f} | acc {metrics['train/accuracy']:.3f} "
               f"| loss {total_loss:+.4f} | grad {metrics['train/grad_norm']:.2f} | len {metrics['train/length']:.0f} "
-              f"| trunc {metrics['train/truncated']:.2f} | signal {n_signal}/{cfg.B} | ent {metrics['train/entropy']:.3f} | kl {metrics['train/kl']:.2e} "
+              f"| trunc {metrics['train/truncated']:.2f} | signal {n_signal}/{cfg.B} | ent {metrics['train/entropy']:.3f} | kl {metrics['train/kl']:.2e} (max {kl_max:.1f}) "
               f"| {metrics['time/step_s']:.0f}s")
         done = step + 1
         train_log.log(metrics, done)
