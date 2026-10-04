@@ -4,7 +4,7 @@
   "B": 4,
   "K": 2,
   "steps": 300,
-  "max_new_tokens": 256,
+  "max_new_tokens": 512,
   "lr": 1e-06,
   "eps": 0.2,
   "beta": 0.04,

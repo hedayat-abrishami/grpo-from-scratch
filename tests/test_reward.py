@@ -18,6 +18,9 @@ from grpo.reward import extract_answer, reward
     ("####", None),
     ("#### no number here", None),
     ("", None),
+    # Qwen writes Markdown: "####" is also a level-4 heading, which must not be read as the answer
+    ("#### Step 2: 3 x 600 = 1800 meters\n...\n#### 540", "540"),
+    ("#### Step 1: 3 sprints a day\nSo the total is **540 meters**.", None),
 ])
 def test_extract_answer(text, expected):
     assert extract_answer(text) == expected

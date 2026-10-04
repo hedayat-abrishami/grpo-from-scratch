@@ -1,17 +1,16 @@
 import re
 
-NUMBER = re.compile(r"-?[\d,]*\.?\d+")
+# "####" immediately followed by the number (optionally "$"). A bare "####" is also a Markdown
+# heading ("#### Step 2: ..."), so the number must come straight after it, not anywhere later.
+ANSWER = re.compile(r"####\s*\$?\s*(-?[\d,]*\.?\d+)")
 
 
 def extract_answer(text):
-    """Return the number after the first '####' as a string without commas, or None."""
-    if "####" not in text:
-        return None
-    after = text.split("####", 1)[1]
-    match = NUMBER.search(after)
+    """Return the number in the first '#### <number>' as a string without commas, or None."""
+    match = ANSWER.search(text)
     if match is None:
         return None
-    return match.group().replace(",", "")
+    return match.group(1).replace(",", "")
 
 
 def reward(text, ground_truth):
