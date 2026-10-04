@@ -87,6 +87,23 @@ def test_prob_adaptive_upper_bound_per_token():
     assert hi[0] > hi[1] > hi[2]
 
 
+def test_dcpo_bounds_match_the_paper():
+    """DCPO eq. 4 with eps_low = 0.16, eps_high = 0.2: both bounds widen as pi_old falls; ratio capped at 10."""
+    q = torch.tensor([1.0, 0.5, 0.1, 1e-6])
+    lo, hi = clip_bounds(q.log(), "dcpo", 0.16, 0.2, 1.0)
+    assert lo[0].item() == pytest.approx(0.8, abs=1e-6)                          # 0.5 + 0.5*sqrt(1 - 0.64)
+    assert hi[0].item() == pytest.approx(0.5 + 0.5 * math.sqrt(1.8), abs=1e-6)   # 1.17: tighter than 1.2 when confident
+    assert torch.all(lo[1:] <= lo[:-1]) and torch.all(hi[1:] >= hi[:-1])         # rarer token -> wider bounds
+    assert lo[-1].item() == pytest.approx(0.5) and hi[-1].item() == pytest.approx(10.0)
+
+
+def test_dcpo_changes_the_loss(batch):
+    new_lp, old_lp, ref_lp, adv, mask = batch
+    dcpo = grpo_loss(new_lp, old_lp, ref_lp, adv, mask, 0.16, BETA, clip="dcpo", eps_high=0.2)
+    assert torch.isfinite(dcpo)
+    assert not torch.allclose(dcpo, loss(batch, clip="symmetric"))
+
+
 def test_unknown_clip_mode_raises():
     with pytest.raises(ValueError):
         clip_bounds(torch.zeros(1), "assymetric", EPS, 0.28, 1.0)

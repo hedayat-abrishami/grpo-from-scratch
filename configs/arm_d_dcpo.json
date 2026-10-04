@@ -6,12 +6,12 @@
   "steps": 300,
   "max_new_tokens": 512,
   "lr": 1e-06,
-  "eps": 0.2,
+  "eps": 0.16,
   "beta": 0.04,
   "ckpt_every": 25,
   "eval_every": 50,
   "eval_n": 100,
-  "clip": "prob_adaptive",
-  "eps_high": 0.28,
-  "c": 0.5
+  "clip": "dcpo",
+  "eps_high": 0.2,
+  "c": 1.0
 }

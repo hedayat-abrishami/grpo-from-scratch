@@ -37,6 +37,13 @@ def clip_bounds(old_lp, mode, eps, eps_high, c):
     if mode == "prob_adaptive":
         p_old = old_lp.exp()
         return 1 - eps, 1 + eps * (1 + c * (1 - p_old))
+    if mode == "dcpo":
+        # DCPO (arXiv 2509.02333), clip rule only: both bounds widen as pi_old falls; ratio capped at 10.
+        # Here eps = DCPO's eps_low (0.16) and eps_high = its eps_high (0.2).
+        q = old_lp.exp()
+        lo = 0.5 + 0.5 * torch.sqrt(torch.clamp(1 - 4 * eps / q, min=0.0))
+        hi = torch.clamp(0.5 + 0.5 * torch.sqrt(1 + 4 * eps_high / q), max=10.0)
+        return lo, hi
     raise ValueError(f"unknown clip mode {mode}")
 
 

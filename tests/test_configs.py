@@ -8,11 +8,11 @@ import pytest
 from grpo.train import Config
 
 ARM_FILES = sorted(glob.glob("configs/arm_*.json"))
-CLIP_FIELDS = {"clip", "eps_high", "c"}
+CLIP_FIELDS = {"clip", "eps", "eps_high", "c"}  # eps too: DCPO uses its own eps_low
 
 
 def test_arm_configs_exist():
-    assert len(ARM_FILES) == 5
+    assert len(ARM_FILES) == 4
 
 
 @pytest.mark.parametrize("path", sorted(glob.glob("configs/*.json")))
