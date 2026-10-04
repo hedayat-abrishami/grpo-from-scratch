@@ -2,7 +2,7 @@ from datasets import load_dataset
 
 SYSTEM_PROMPT = (
     "Solve the math problem step by step. "
-    "On the last line, write the final answer as '#### <number>'."
+    "Put the final answer, as a number only, in \\boxed{}."
 )
 
 

@@ -1,20 +1,23 @@
 import re
 
-# "####" immediately followed by the number (optionally "$"). A bare "####" is also a Markdown
-# heading ("#### Step 2: ..."), so the number must come straight after it, not anywhere later.
-ANSWER = re.compile(r"####\s*\$?\s*(-?[\d,]*\.?\d+)")
+# Qwen-Instruct's native answer format: \boxed{...}, allowing one level of nested braces (\boxed{18 \text{ dollars}}).
+BOXED = re.compile(r"\\boxed\{((?:[^{}]|\{[^{}]*\})*)\}")
+NUMBER = re.compile(r"-?[\d,]*\.?\d+")
 
 
 def extract_answer(text):
-    """Return the number in the first '#### <number>' as a string without commas, or None."""
-    match = ANSWER.search(text)
+    """Return the first number inside the LAST \\boxed{...}, without commas, or None."""
+    boxes = BOXED.findall(text)
+    if not boxes:
+        return None
+    match = NUMBER.search(boxes[-1])
     if match is None:
         return None
-    return match.group(1).replace(",", "")
+    return match.group().replace(",", "")
 
 
 def reward(text, ground_truth):
-    """1.0 for the correct number, plus 0.1 for using the '#### <number>' format."""
+    """1.0 for the correct number, plus 0.1 for putting a number in \\boxed{}."""
     pred = extract_answer(text=text)
     if pred is None:
         return 0.0
