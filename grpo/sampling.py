@@ -28,9 +28,20 @@ def sample_group(model, tokenizer, question, G, max_new_tokens):
 
     return inputs["input_ids"], completions, mask, ~has_eos
 
-def token_logprobs(model, prompt_ids, completions, return_entropy=False):
-    """Log-prob of each completion token under `model`. Shape (G, completion_len)."""
+def token_logprobs(model, prompt_ids, completions, return_entropy=False, chunk=0):
+    """Log-prob of each completion token under `model`. Shape (G, completion_len).
+
+    chunk > 0 runs the rows `chunk` at a time and joins the results: same values, lower peak memory.
+    Only useful without gradients; with gradients every chunk's graph is kept until backward anyway.
+    """
     G, L = completions.shape
+    if 0 < chunk < G:
+        parts = [token_logprobs(model, prompt_ids, completions[i : i + chunk], return_entropy)
+                 for i in range(0, G, chunk)]
+        logp = torch.cat([p[0] for p in parts])
+        entropy = torch.cat([p[1] for p in parts]) if return_entropy else None
+        return logp, entropy
+
     full = torch.cat([prompt_ids.repeat(G, 1), completions], dim=1)
 
     logits = model(full, logits_to_keep=L+1).logits[:, :-1].float()

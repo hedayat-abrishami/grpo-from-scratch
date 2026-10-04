@@ -26,6 +26,7 @@ class Config:
     G: int = 4                      # completions per question
     B: int = 4                      # questions per optimizer step
     K: int = 1                      # optimizer updates per batch of rollouts (1 = plain GRPO)
+    micro_G: int = 0                # answers per forward/backward chunk (0 = all G at once); lower it if memory runs out
     steps: int = 12
     max_new_tokens: int = 256
     lr: float = 1e-6
@@ -147,8 +148,8 @@ def main():
                 texts = [tok.decode(completions[i][mask[i]], skip_special_tokens=True) for i in range(cfg.G)]
                 rewards = torch.tensor([reward(t, ex["answer"]) for t in texts], device=device)
                 adv = advantages(rewards)
-                old_lp, ent = token_logprobs(model, prompt_ids, completions, return_entropy=True)
-                ref_lp, _ = token_logprobs(ref_model, prompt_ids, completions)
+                old_lp, ent = token_logprobs(model, prompt_ids, completions, return_entropy=True, chunk=cfg.micro_G)
+                ref_lp, _ = token_logprobs(ref_model, prompt_ids, completions, chunk=cfg.micro_G)
                 rollouts.append(dict(prompt_ids=prompt_ids, completions=completions, mask=mask,
                                      adv=adv, old_lp=old_lp, ref_lp=ref_lp))
 
@@ -163,26 +164,35 @@ def main():
         for k in range(cfg.K):
             optimizer.zero_grad()
             for ro in rollouts:
-                new_lp, _ = token_logprobs(model, ro["prompt_ids"], ro["completions"])
-                if k > 0:  # on pass 0 rho == 1, so nothing can be clipped
-                    for name, (n, up, low) in clip_counts(new_lp, ro["old_lp"], ro["adv"], ro["mask"],
-                                                          cfg.clip, cfg.eps, cfg.eps_high, cfg.c).items():
-                        clip_tot[name][0] += n
-                        clip_tot[name][1] += up
-                        clip_tot[name][2] += low
-                if k == 0:  # before the first update the policy still equals pi_old
-                    max_dev = (torch.exp(new_lp - ro["old_lp"]) - 1)[ro["mask"]].abs().max().item()
-                    assert max_dev < 1e-3, f"rho != 1 before update: {max_dev}"
+                G = ro["completions"].shape[0]
+                size = cfg.micro_G or G
+                kl_sum, kl_tokens = 0.0, 0
+                # Forward + backward a chunk of answers at a time; the gradients add up to the full-group gradient.
+                for s in range(0, G, size):
+                    part = {key: ro[key][s : s + size] for key in ("completions", "mask", "adv", "old_lp", "ref_lp")}
+                    new_lp, _ = token_logprobs(model, ro["prompt_ids"], part["completions"])
+                    if k > 0:  # on pass 0 rho == 1, so nothing can be clipped
+                        for name, (n, up, low) in clip_counts(new_lp, part["old_lp"], part["adv"], part["mask"],
+                                                              cfg.clip, cfg.eps, cfg.eps_high, cfg.c).items():
+                            clip_tot[name][0] += n
+                            clip_tot[name][1] += up
+                            clip_tot[name][2] += low
+                    if k == 0:  # before the first update the policy still equals pi_old
+                        max_dev = (torch.exp(new_lp - part["old_lp"]) - 1)[part["mask"]].abs().max().item()
+                        assert max_dev < 1e-3, f"rho != 1 before update: {max_dev}"
 
-                loss = grpo_loss(new_lp, ro["old_lp"], ro["ref_lp"], ro["adv"], ro["mask"],
-                                 cfg.eps, cfg.beta, cfg.clip, cfg.eps_high, cfg.c) / cfg.B
-                loss.backward()
+                    # grpo_loss averages over the answers it is given; weight each chunk by its share of the group
+                    loss = grpo_loss(new_lp, part["old_lp"], part["ref_lp"], part["adv"], part["mask"],
+                                     cfg.eps, cfg.beta, cfg.clip, cfg.eps_high, cfg.c) * (new_lp.shape[0] / G) / cfg.B
+                    loss.backward()
+                    if k == 0:
+                        with torch.no_grad():
+                            d = part["ref_lp"] - new_lp
+                            kl_sum += ((torch.exp(d) - d - 1) * part["mask"]).sum().item()
+                            kl_tokens += part["mask"].sum().item()
+                        total_loss += loss.item()
                 if k == 0:
-                    with torch.no_grad():
-                        d = ro["ref_lp"] - new_lp
-                        kl = ((torch.exp(d) - d - 1) * ro["mask"]).sum() / ro["mask"].sum()
-                    all_kl.append(kl.item())
-                    total_loss += loss.item()
+                    all_kl.append(kl_sum / kl_tokens)  # mean over all real tokens of the question, as before
             grad_norm = torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
             optimizer.step()
 
