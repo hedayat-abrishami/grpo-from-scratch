@@ -1,4 +1,4 @@
-# The experiment: 4 arms x 3 seeds. Run only after tuning, once the configs are frozen.
+# The experiment: 4 arms x 2 seeds. Run only after tuning, once the configs are frozen.
 # Seeds are interleaved across arms, so if the budget runs out, every arm still has the same number of seeds.
 a-seed0  --config configs/arm_a_symmetric.json   --seed 0
 b-seed0  --config configs/arm_b_clip_higher.json --seed 0
@@ -8,7 +8,3 @@ a-seed1  --config configs/arm_a_symmetric.json   --seed 1
 b-seed1  --config configs/arm_b_clip_higher.json --seed 1
 c-seed1  --config configs/arm_c_adaptive_c1.json --seed 1
 d-seed1  --config configs/arm_d_dcpo.json        --seed 1
-a-seed2  --config configs/arm_a_symmetric.json   --seed 2
-b-seed2  --config configs/arm_b_clip_higher.json --seed 2
-c-seed2  --config configs/arm_c_adaptive_c1.json --seed 2
-d-seed2  --config configs/arm_d_dcpo.json        --seed 2
