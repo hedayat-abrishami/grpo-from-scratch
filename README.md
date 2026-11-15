@@ -287,8 +287,7 @@ that each rule does what it's designed to do.
 
 ![Answer length, KL to the starting model and training reward](figures/stability.png)
 
-Three things could explain or undermine an accuracy difference without involving entropy: answer length (Clip-Higher
-is known to lengthen answers), how far each arm drifts from the starting model, and training instability.
+Three things could explain or undermine an accuracy difference without involving entropy: answer length, how far each arm drifts from the starting model, and training instability.
 
 - **Length is not a confound.** Every arm shortened its answers the same way, from ~300 tokens over the first steps
   to ~270–285 over the last 50. None got longer.
