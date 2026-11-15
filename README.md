@@ -66,7 +66,7 @@ clipped tokens, split by each token's old probability.
 
 ### Hypothesis
 
-Written before any arm ran. The arms are **A** (symmetric), **B** (Clip-Higher), **C** (linear, probability-aware)
+I wrote these down before running the experiments. The arms are **A** (symmetric), **B** (Clip-Higher), **C** (linear, probability-aware)
 and **D** (DCPO's square-root bounds); [The four clip rules](#the-four-clip-rules) gives their exact bounds.
 
 1. **Minimum:** from-scratch GRPO improves Qwen2.5-0.5B-Instruct on GSM8K over its starting checkpoint.
