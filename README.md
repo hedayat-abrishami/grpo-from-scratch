@@ -343,33 +343,6 @@ entered the entropy-collapse regime that probability-aware clipping is meant to 
 act on. It says nothing about how these rules behave once entropy does start to collapse, for example with longer
 training, larger steps, bigger models or harder problems.
 
-## Reproduce
-
-```bash
-source setup.sh
-python -m pytest -q
-```
-
-`setup.sh` creates `.venv`, installs `requirements.txt`, and prints the torch version and the detected device
-(CUDA, MPS or CPU). It works on macOS (Apple Silicon) and on Linux GPU machines, and needs Python 3.10+. The tests
-cover the loss, the reward and the configs.
-
-The experiment itself needs a CUDA GPU (I used one A10):
-
-```bash
-bash scripts/run_all.sh jobs/baseline.txt runs --micro_G 2 --tf32   # untrained model on all 1,319 test questions
-bash scripts/run_all.sh jobs/tune.txt runs --micro_G 2 --tf32       # learning-rate check on arm A
-bash scripts/run_all.sh jobs/main.txt runs --micro_G 2 --tf32       # the 8 runs: 4 arms x 2 seeds
-python scripts/check_runs.py runs                                   # status and summary of every run
-```
-
-Each line of a job list is a run name plus its flags. Finished runs are skipped and interrupted ones resume from their
-checkpoint, so it's safe to run the same command again. A single run looks like this:
-
-```bash
-python -m grpo.train --config configs/arm_c_adaptive_c1.json --seed 0 --run_name c-seed0 --ckpt_dir runs --micro_G 2 --tf32
-```
-
 ## Appendix
 
 ### Learning-rate check
@@ -489,6 +462,33 @@ requirements.txt
   each old-probability bucket.
 - **Reproducible runs.** Each run folder stores its config, the git commit, `pip freeze` and per-step CSVs, and an
   interrupted run resumes from its last checkpoint.
+
+### Reproduce
+
+```bash
+source setup.sh
+python -m pytest -q
+```
+
+`setup.sh` creates `.venv`, installs `requirements.txt`, and prints the torch version and the detected device
+(CUDA, MPS or CPU). It works on macOS (Apple Silicon) and on Linux GPU machines, and needs Python 3.10+. The tests
+cover the loss, the reward and the configs.
+
+The experiment itself needs a CUDA GPU (I used one A10):
+
+```bash
+bash scripts/run_all.sh jobs/baseline.txt runs --micro_G 2 --tf32   # untrained model on all 1,319 test questions
+bash scripts/run_all.sh jobs/tune.txt runs --micro_G 2 --tf32       # learning-rate check on arm A
+bash scripts/run_all.sh jobs/main.txt runs --micro_G 2 --tf32       # the 8 runs: 4 arms x 2 seeds
+python scripts/check_runs.py runs                                   # status and summary of every run
+```
+
+Each line of a job list is a run name plus its flags. Finished runs are skipped and interrupted ones resume from their
+checkpoint, so it's safe to run the same command again. A single run looks like this:
+
+```bash
+python -m grpo.train --config configs/arm_c_adaptive_c1.json --seed 0 --run_name c-seed0 --ckpt_dir runs --micro_G 2 --tf32
+```
 
 ## References
 
