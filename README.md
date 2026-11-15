@@ -1,5 +1,22 @@
 # The effect of the clip rule alone in GRPO: four clip bounds on Qwen2.5-0.5B-Instruct
 
+## Contents
+
+- [TL;DR](#tldr)
+- [Motivation and hypothesis](#motivation-and-hypothesis): [The problem](#the-problem-clip-changes-come-bundled) ·
+  [Why the clip bound matters](#why-the-clip-bound-matters) · [What's held fixed](#whats-held-fixed) ·
+  [Hypothesis](#hypothesis)
+- [Background](#background)
+- [The four clip rules](#the-four-clip-rules)
+- [Setup](#setup)
+- [Results](#results): [Accuracy](#accuracy) · [Entropy](#entropy) · [What each rule clipped](#what-each-rule-clipped) ·
+  [Stability](#stability) · [Scorecard](#scorecard-against-the-pre-registered-criteria)
+- [Discussion: why entropy didn't collapse](#discussion-why-entropy-didnt-collapse)
+- [Appendix](#appendix): [Learning-rate check](#learning-rate-check) · [Entropy by window](#entropy-by-window-of-training) ·
+  [Accuracy during training](#accuracy-during-training) · [Per-run stability numbers](#per-run-stability-numbers) ·
+  [Systems profile](#systems-profile) · [Implementation notes](#implementation-notes) · [Reproduce](#reproduce)
+- [References](#references)
+
 ## TL;DR
 
 - **Why this write-up:** papers that change GRPO's clip rule almost never change it alone. DAPO, for example, ships
