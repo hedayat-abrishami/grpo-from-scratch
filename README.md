@@ -403,6 +403,7 @@ jobs/             job lists for the baseline, the learning-rate check and the 8 
 scripts/          run_all.sh (runs a job list back to back, resumable), check_runs.py (status and summary)
 tests/            unit tests for the loss, the reward and the configs
 figures/          the plots in this README
+run_book.ipynb    a step-by-step walk through one GRPO step with the code in grpo/
 setup.sh          environment setup
 requirements.txt
 ```
