@@ -343,33 +343,6 @@ entered the entropy-collapse regime that probability-aware clipping is meant to 
 act on. It says nothing about how these rules behave once entropy does start to collapse, for example with longer
 training, larger steps, bigger models or harder problems.
 
-## Limitations and next steps
-
-**Limitations**
-
-- **2 seeds per arm.** Each spread comes from two points, so only large effects can be confirmed.
-- **Unpaired accuracy.** I saved aggregate accuracy, not per-question correctness, so I couldn't run a paired test
-  (for example, McNemar's test on the same 1,319 questions). Saving per-question results would make the comparisons
-  much sharper at no extra GPU cost.
-- **One learning rate, short runs.** 300 steps at $10^{-6}$ moved the model only a little (KL ~0.05). Collapse may
-  appear with longer training or bigger steps, which is exactly where the clip rules would matter.
-- **Small batches.** 4 questions × 8 answers per step make the per-step metrics noisy.
-- **Entropy depends on the questions.** Per-step entropy is measured on that step's sampled questions, so part of its
-  variation comes from the questions, not the model.
-- **One model, one dataset.** Everything here is 0.5B on GSM8K. I don't know yet how it changes at a larger scale or
-  on harder math.
-
-**Next steps**
-
-1. **Replicate C's lead.** Run a third and fourth seed for A and C only (~14 GPU-hours), saving per-question
-   correctness for a paired test.
-2. **Enter the collapse regime on purpose.** Use longer runs (1,000+ steps), $K = 4$, or a somewhat higher learning
-   rate with a clamp on the per-token KL, and check that arm A's entropy actually collapses before comparing the arms
-   again.
-3. **Cut the noise.** Log the clip fraction per update instead of per step, and measure entropy on a fixed set of
-   prompts.
-4. **Finish the systems profile** with the instrumented run described in the appendix.
-
 ## Reproduce
 
 ```bash
