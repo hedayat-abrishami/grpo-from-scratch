@@ -36,7 +36,7 @@ standardization and loss aggregation (Yang et al., 2025). In this repo, the clip
 ### Why the clip bound matters
 
 GRPO keeps PPO's clipped surrogate objective (Schulman et al., 2017; Shao et al., 2024). Each token's probability
-ratio $\rho_t = \pi_\theta(o_t \mid q, o_{<t}) / \pi_{\text{old}}(o_t \mid q, o_{<t})$ is clipped to
+ratio $\rho_t = \pi_\theta(o_t \mid q, o_{< t}) / \pi_{\text{old}}(o_t \mid q, o_{< t})$ is clipped to
 $[1-\epsilon,\ 1+\epsilon]$: once a token has moved that far in the direction its advantage pushes, it stops
 receiving gradient from that batch. The bound is relative, so in absolute terms it treats tokens very differently.
 With $\epsilon = 0.2$, a likely token at $\pi_{\text{old}} = 0.9$ can reach ~1.0 in one batch, while a rare token at
@@ -100,7 +100,7 @@ advantage, shared by all its tokens, and each token $t$ gets a probability ratio
 ```math
 \hat A_i = \frac{r_i - \mathrm{mean}(\mathbf{r})}{\mathrm{std}(\mathbf{r})},
 \qquad
-\rho_{i,t} = \frac{\pi_\theta(o_{i,t} \mid q, o_{i,<t})}{\pi_{\text{old}}(o_{i,t} \mid q, o_{i,<t})}
+\rho_{i,t} = \frac{\pi_\theta(o_{i,t} \mid q, o_{i, < t})}{\pi_{\text{old}}(o_{i,t} \mid q, o_{i, < t})}
 ```
 
 The objective for one token is the clipped surrogate minus a KL penalty to the reference model:
@@ -133,7 +133,7 @@ link to entropy.
 ## The four clip rules
 
 Each rule sets the interval $[\text{low},\ \text{high}]$ in $\text{clip}(\rho_{i,t},\ \text{low},\ \text{high})$;
-the rest of the objective is unchanged. Here $p = \pi_{\text{old}}(o_{i,t} \mid q, o_{i,<t})$ is the token's
+the rest of the objective is unchanged. Here $p = \pi_{\text{old}}(o_{i,t} \mid q, o_{i, < t})$ is the token's
 probability under the policy that sampled it.
 
 | Arm | Rule | Lower bound | Upper bound | Source |
