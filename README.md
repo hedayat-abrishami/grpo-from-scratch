@@ -5,7 +5,7 @@
 - **Why this write-up:** papers that change GRPO's clip rule almost never change it alone. DAPO, for example, ships
   Clip-Higher together with three other techniques and reports their gains stacked, so the clip rule's own effect is
   never isolated. Here the four arms differ **only** in the clip rule, and everything else is held fixed.
-- **What I did:** I implemented GRPO from scratch in plain PyTorch[^claude] and compared four PPO-style clip rules on
+- **What I did:** I implemented GRPO from in PyTorch[^claude] and compared four PPO-style clip rules on
   **Qwen2.5-0.5B-Instruct** and **GSM8K**: (A) symmetric, from GRPO; (B) Clip-Higher, from DAPO; (C) a linear
   probability-aware upper bound; and (D) DCPO's square-root bounds. Each arm ran 300 steps with 2 seeds (8 runs on one A10).
 - **GRPO works.** All 8 runs beat the untrained model on the full 1,319-question test set: 46.2% → 47.2–52.9%
@@ -27,7 +27,7 @@
 This is the main reason I ran this experiment. Papers that change the clip rule almost always change other things at
 the same time, so it's hard to tell how much the clip rule itself contributes. DAPO is the clearest example. It
 introduces Clip-Higher together with dynamic sampling, a token-level loss and overlong reward shaping, and reports
-their gains stacked: on AIME 2024 with Qwen2.5-32B, naive GRPO scores 30; adding overlong filtering gives 36, then
+their gains stacked, each added on top of the previous ones. In AIME 2024 accuracy (%) with Qwen2.5-32B, naive GRPO scores 30; adding overlong filtering gives 36, then
 Clip-Higher 38, soft overlong punishment 41, the token-level loss 42 and dynamic sampling 50 (Yu et al., 2025,
 Table 1). Clip-Higher's +2 is measured on top of one earlier change and before the rest, so its effect on its own,
 or inside the final recipe, is never isolated. DCPO does the same: its new bounds ship with a new advantage
