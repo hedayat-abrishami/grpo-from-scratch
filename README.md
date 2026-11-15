@@ -184,10 +184,7 @@ scored on a fixed set of 100 test questions; that's only for spotting collapses,
 ±5 points of noise. At the end, each run is scored on all 1,319 test questions, and that's the number I compare.
 
 **Runs.** 4 arms × 2 seeds (0 and 1) = 8 runs, all from the same commit, on one NVIDIA A10 in fp32 with TF32 matrix
-multiplies. The seed decides which questions are drawn and which answers are sampled. Every run folder keeps its
-config, the git commit, `pip freeze` and the per-step logs. Before the first update of each step the policy still
-equals $\pi_{\text{old}}$, so the code asserts that every ratio is within $10^{-3}$ of 1. That also checks that TF32
-doesn't distort the ratios.
+multiplies. The seed decides which questions are drawn and which answers are sampled.
 
 **What's logged.** Every step: reward, accuracy, format rate, answer length and truncation, token entropy, KL to the
 reference (the mean and the largest single-token value), the gradient norm, and the clip fraction for the upper and
