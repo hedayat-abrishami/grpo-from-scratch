@@ -338,10 +338,10 @@ the other arms. I treat it as a lead to replicate, not a finding.
 **Looser is not monotonically better.** D relaxes clipping much more than C, on both bounds, yet it doesn't beat A. If
 loosening the bound helped through some simple mechanism, D should have done at least as well as C.
 
-**What this means for the published results.** The probability-aware papers report entropy benefits on larger models
-and harder math. This experiment is not evidence against them. It shows that at 0.5B on GSM8K, at a learning rate low
-enough to be stable, training doesn't enter the entropy-collapse regime those methods address, so their benefit has
-nothing to act on.
+**What this does and doesn't show.** At 0.5B on GSM8K, with a learning rate low enough to be stable, training never
+entered the entropy-collapse regime that probability-aware clipping is meant to fix, so the clip rule had nothing to
+act on. It says nothing about how these rules behave once entropy does start to collapse, for example with longer
+training, larger steps, bigger models or harder problems.
 
 ## Limitations and next steps
 
