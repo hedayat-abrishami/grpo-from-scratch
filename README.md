@@ -343,74 +343,6 @@ and harder math. This experiment is not evidence against them. It shows that at 
 enough to be stable, training doesn't enter the entropy-collapse regime those methods address, so their benefit has
 nothing to act on.
 
-## Systems profile
-
-
-These numbers come from the training logs. A proper breakdown of where the time goes needs an instrumented run,
-which I haven't done yet (see the end of this section).
-
-**Hardware.** Everything ran on one NVIDIA A10 (24 GB), with PyTorch 2.14 and CUDA 13.0. Weights are fp32, and
-matrix multiplies use TF32.
-
-**Memory.** The policy and the frozen reference are about 2 GB each in fp32. The policy's gradients add another
-~2 GB and AdamW's two moment buffers ~4 GB, so roughly 10 GB is used before any activations. The rest of the card
-goes to activations and to the logits over Qwen's 152k-token vocabulary, which is why each forward and backward pass
-handles 2 answers at a time (`--micro_G 2`).
-
-**Time.** A step takes about 35 s on average (21–47 s, depending on how long the answers are). A 300-step run takes
-~2.9 hours, and the 8 runs took ~23 A10-hours of training, plus roughly 13 minutes for each final 1,319-question
-evaluation. End to end, that's ~265 generated tokens per second: 32 answers of ~287 tokens every ~35 s.
-
-**Not measured yet.** The logs only have the total time per step. To see where the 35 s go, I plan a ~20-step
-instrumented run with CUDA-synchronized timers around sampling, the old-policy and reference forward passes and the
-two updates, plus `torch.cuda.max_memory_allocated`. That gives the split between generating answers and updating
-the model, the tokens per second of each phase, and peak memory.
-
-## Implementation notes
-
-A from-scratch implementation of **Group Relative Policy Optimization** (GRPO,
-[Shao et al. 2024](https://arxiv.org/abs/2402.03300)) in plain PyTorch, trained on GSM8K. No RL library
-is used: `transformers` loads the models and runs generation, and everything else is written here.
-
-### Layout
-
-```
-grpo/
-  data.py         GSM8K loading, chat-template prompt with the \boxed{} instruction
-  reward.py       answer extraction from the last \boxed{} and the reward
-  sampling.py     group generation, masks, per-token log-probs and entropy
-  loss.py         advantages, the four clip rules, GRPO loss, clip counting by old-probability bucket
-  eval.py         greedy pass@1
-  checkpoint.py   save and resume
-  logger.py       per-step CSV metrics
-  utils.py        device selection, seeding
-  train.py        config, training loop, logging, evaluation
-configs/          one JSON config per arm (they differ only in the clip settings)
-jobs/             job lists for the baseline, the learning-rate check and the 8 main runs
-scripts/          run_all.sh (runs a job list back to back, resumable), check_runs.py (status and summary)
-tests/            unit tests for the loss, the reward and the configs
-figures/          the plots in this README
-run_book.ipynb    a step-by-step walk through one GRPO step with the code in grpo/
-setup.sh          environment setup
-requirements.txt
-```
-
-### Details worth knowing
-
-- **One branch per clip rule.** `clip_bounds` in `loss.py` returns each token's lower and upper bound from its old
-  log-probability. The four modes are `symmetric` (A), `decoupled` (B, Clip-Higher), `prob_adaptive` (C) and `dcpo`
-  (D). A new rule is one more branch plus one config file.
-- **Old-policy and reference log-probs are computed once per step,** right after sampling and without gradients, and
-  both updates reuse them.
-- **Memory.** Answers go through forward and backward two at a time (`--micro_G 2`), and each chunk's loss is weighted
-  so the summed gradient equals the gradient of the whole batch.
-- **A built-in precision check.** Before the first update, the code asserts that every ratio is within $10^{-3}$ of 1,
-  which also confirms that TF32 doesn't distort the ratios.
-- **Extra logging.** Besides the usual metrics, every step logs the largest single-token KL and the clip counts for
-  each old-probability bucket.
-- **Reproducible runs.** Each run folder stores its config, the git commit, `pip freeze` and per-step CSVs, and an
-  interrupted run resumes from its last checkpoint.
-
 ## Limitations and next steps
 
 **Limitations**
@@ -436,7 +368,7 @@ requirements.txt
    again.
 3. **Cut the noise.** Log the clip fraction per update instead of per step, and measure entropy on a fixed set of
    prompts.
-4. **Finish the systems profile** with the instrumented run described above.
+4. **Finish the systems profile** with the instrumented run described in the appendix.
 
 ## Reproduce
 
@@ -516,6 +448,74 @@ They also disagree with the full test set in places: C's seed 1 scored 46% on th
 | c-seed1 | 22.3 | 3,007 | 1 | 282 | 0.053 |
 | d-seed0 | 9.0 | 864 | 0 | 285 | 0.049 |
 | d-seed1 | 13.6 | 2,976 | 2 | 279 | 0.059 |
+
+### Systems profile
+
+
+These numbers come from the training logs. A proper breakdown of where the time goes needs an instrumented run,
+which I haven't done yet (see the end of this section).
+
+**Hardware.** Everything ran on one NVIDIA A10 (24 GB), with PyTorch 2.14 and CUDA 13.0. Weights are fp32, and
+matrix multiplies use TF32.
+
+**Memory.** The policy and the frozen reference are about 2 GB each in fp32. The policy's gradients add another
+~2 GB and AdamW's two moment buffers ~4 GB, so roughly 10 GB is used before any activations. The rest of the card
+goes to activations and to the logits over Qwen's 152k-token vocabulary, which is why each forward and backward pass
+handles 2 answers at a time (`--micro_G 2`).
+
+**Time.** A step takes about 35 s on average (21–47 s, depending on how long the answers are). A 300-step run takes
+~2.9 hours, and the 8 runs took ~23 A10-hours of training, plus roughly 13 minutes for each final 1,319-question
+evaluation. End to end, that's ~265 generated tokens per second: 32 answers of ~287 tokens every ~35 s.
+
+**Not measured yet.** The logs only have the total time per step. To see where the 35 s go, I plan a ~20-step
+instrumented run with CUDA-synchronized timers around sampling, the old-policy and reference forward passes and the
+two updates, plus `torch.cuda.max_memory_allocated`. That gives the split between generating answers and updating
+the model, the tokens per second of each phase, and peak memory.
+
+### Implementation notes
+
+A from-scratch implementation of **Group Relative Policy Optimization** (GRPO,
+[Shao et al. 2024](https://arxiv.org/abs/2402.03300)) in plain PyTorch, trained on GSM8K. No RL library
+is used: `transformers` loads the models and runs generation, and everything else is written here.
+
+#### Layout
+
+```
+grpo/
+  data.py         GSM8K loading, chat-template prompt with the \boxed{} instruction
+  reward.py       answer extraction from the last \boxed{} and the reward
+  sampling.py     group generation, masks, per-token log-probs and entropy
+  loss.py         advantages, the four clip rules, GRPO loss, clip counting by old-probability bucket
+  eval.py         greedy pass@1
+  checkpoint.py   save and resume
+  logger.py       per-step CSV metrics
+  utils.py        device selection, seeding
+  train.py        config, training loop, logging, evaluation
+configs/          one JSON config per arm (they differ only in the clip settings)
+jobs/             job lists for the baseline, the learning-rate check and the 8 main runs
+scripts/          run_all.sh (runs a job list back to back, resumable), check_runs.py (status and summary)
+tests/            unit tests for the loss, the reward and the configs
+figures/          the plots in this README
+run_book.ipynb    a step-by-step walk through one GRPO step with the code in grpo/
+setup.sh          environment setup
+requirements.txt
+```
+
+#### Details worth knowing
+
+- **One branch per clip rule.** `clip_bounds` in `loss.py` returns each token's lower and upper bound from its old
+  log-probability. The four modes are `symmetric` (A), `decoupled` (B, Clip-Higher), `prob_adaptive` (C) and `dcpo`
+  (D). A new rule is one more branch plus one config file.
+- **Old-policy and reference log-probs are computed once per step,** right after sampling and without gradients, and
+  both updates reuse them.
+- **Memory.** Answers go through forward and backward two at a time (`--micro_G 2`), and each chunk's loss is weighted
+  so the summed gradient equals the gradient of the whole batch.
+- **A built-in precision check.** Before the first update, the code asserts that every ratio is within $10^{-3}$ of 1,
+  which also confirms that TF32 doesn't distort the ratios.
+- **Extra logging.** Besides the usual metrics, every step logs the largest single-token KL and the clip counts for
+  each old-probability bucket.
+- **Reproducible runs.** Each run folder stores its config, the git commit, `pip freeze` and per-step CSVs, and an
+  interrupted run resumes from its last checkpoint.
 
 ## References
 
