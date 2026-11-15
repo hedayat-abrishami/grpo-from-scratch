@@ -301,16 +301,7 @@ Three things could explain or undermine an accuracy difference without involving
 - **No run collapsed.** The arm means of the 100-question checks every 50 steps stay within ~41–53% (figure in the
   [appendix](#appendix)).
 
-| Run | Max grad norm (pre-clip) | Max per-token KL | Steps with per-token KL > 1,000 | Length, last 50 steps | Mean KL, last 100 steps |
-|---|---|---|---|---|---|
-| a-seed0 | 4.5 | 250 | 0 | 281 | 0.050 |
-| a-seed1 | 10.0 | 666 | 0 | 280 | 0.055 |
-| b-seed0 | 2,602.3 | 45,761 | 1 | 270 | 0.053 |
-| b-seed1 | 7.2 | 462 | 0 | 275 | 0.057 |
-| c-seed0 | 5.1 | 478 | 0 | 274 | 0.055 |
-| c-seed1 | 22.3 | 3,007 | 1 | 282 | 0.053 |
-| d-seed0 | 9.0 | 864 | 0 | 285 | 0.049 |
-| d-seed1 | 13.6 | 2,976 | 2 | 279 | 0.059 |
+Per-run spike, length and KL numbers are in the [appendix](#appendix).
 
 ### Scorecard against the pre-registered criteria
 
@@ -512,6 +503,19 @@ Every 50 steps, each run was scored on the same 100 test questions. With 100 que
 uncertain by about ±5 points, more than every effect in this study, so these curves are only for spotting collapses.
 They also disagree with the full test set in places: C's seed 1 scored 46% on the 100 questions at step 300, but
 52.9% on all 1,319.
+
+### Per-run stability numbers
+
+| Run | Max grad norm (pre-clip) | Max per-token KL | Steps with per-token KL > 1,000 | Length, last 50 steps | Mean KL, last 100 steps |
+|---|---|---|---|---|---|
+| a-seed0 | 4.5 | 250 | 0 | 281 | 0.050 |
+| a-seed1 | 10.0 | 666 | 0 | 280 | 0.055 |
+| b-seed0 | 2,602.3 | 45,761 | 1 | 270 | 0.053 |
+| b-seed1 | 7.2 | 462 | 0 | 275 | 0.057 |
+| c-seed0 | 5.1 | 478 | 0 | 274 | 0.055 |
+| c-seed1 | 22.3 | 3,007 | 1 | 282 | 0.053 |
+| d-seed0 | 9.0 | 864 | 0 | 285 | 0.049 |
+| d-seed1 | 13.6 | 2,976 | 2 | 279 | 0.059 |
 
 ## References
 
