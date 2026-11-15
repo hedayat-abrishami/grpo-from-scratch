@@ -94,17 +94,30 @@ other answers to the same prompt, with no critic and no clipping, matches or bea
 
 **GRPO.** Group Relative Policy Optimization drops the critic (Shao et al., 2024). For each prompt $q$ it samples $G$
 answers from $\pi_{\text{old}}$, scores them, and uses the group's mean and standard deviation as the baseline and
-scale. It keeps PPO's clipped ratio, so each batch can be reused for several updates:
+scale. It keeps PPO's clipped ratio, so each batch can be reused for several updates. Each answer $o_i$ gets one
+advantage, shared by all its tokens, and each token $t$ gets a probability ratio:
 
-$$
-J(\theta) = \mathbb{E}\left[\frac{1}{G}\sum_{i=1}^{G}\frac{1}{|o_i|}\sum_{t=1}^{|o_i|}
-\Big(\min\big(\rho_{i,t}\hat A_i,\ \text{clip}(\rho_{i,t},\,1-\epsilon,\,1+\epsilon)\,\hat A_i\big) - \beta D_{i,t}\Big)\right],
+```math
+\hat A_i = \frac{r_i - \mathrm{mean}(\mathbf{r})}{\mathrm{std}(\mathbf{r})},
 \qquad
-\hat A_i = \frac{r_i - \operatorname{mean}(\mathbf r)}{\operatorname{std}(\mathbf r)}
-$$
+\rho_{i,t} = \frac{\pi_\theta(o_{i,t} \mid q, o_{i,<t})}{\pi_{\text{old}}(o_{i,t} \mid q, o_{i,<t})}
+```
 
-where $D_{i,t}$ is a per-token estimator of $\text{KL}(\pi_\theta \,\|\, \pi_{\text{ref}})$. Dropping the critic
-removes a second network as large as the policy, together with its optimizer state.
+The objective for one token is the clipped surrogate minus a KL penalty to the reference model:
+
+```math
+\ell_{i,t} = \min\Big(\rho_{i,t} \hat A_i,\ \mathrm{clip}(\rho_{i,t},\ 1-\epsilon,\ 1+\epsilon)\, \hat A_i\Big) - \beta D_{i,t}
+```
+
+GRPO maximizes its average, first over the tokens of each answer and then over the $G$ answers:
+
+```math
+J(\theta) = \mathbb{E}\left[\frac{1}{G}\sum_{i=1}^{G} \frac{1}{|o_i|}\sum_{t=1}^{|o_i|} \ell_{i,t}\right]
+```
+
+Here $D_{i,t}$ is a per-token estimate of $\mathrm{KL}(\pi_\theta \Vert \pi_{\text{ref}})$ and $\beta$ is its weight. The
+clip interval $[1-\epsilon,\ 1+\epsilon]$ is the only part this repo changes. Dropping the critic removes a second
+network as large as the policy, together with its optimizer state.
 
 **Verifiable rewards.** DeepSeek-R1 scaled GRPO with rule-based rewards: a program checks the final answer of a
 math problem or runs the tests of a code problem, so there is no learned reward model to exploit (DeepSeek-AI, 2025).
@@ -127,10 +140,10 @@ probability under the policy that sampled it.
 |---|---|---|---|---|
 | A | Symmetric, $\epsilon = 0.2$ | $0.8$ | $1.2$ | GRPO (Shao et al., 2024) |
 | B | Clip-Higher | $0.8$ | $1.28$ | DAPO (Yu et al., 2025) |
-| C | Linear, probability-aware ($c = 1$) | $0.8$ | $1 + 0.2\,(2 - p)$ | upper-only variant of the linear thresholds in Chen et al. (2026) |
+| C | Linear, probability-aware ($c = 1$) | $0.8$ | $1 + 0.2(2 - p)$ | upper-only variant of the linear thresholds in Chen et al. (2026) |
 | D | Square root (DCPO) | $0.5 + 0.5\sqrt{\max(1 - 0.64/p,\ 0)}$ | $\min\big(0.5 + 0.5\sqrt{1 + 0.8/p},\ 10\big)$ | DCPO's clip rule only (Yang et al., 2025) |
 
-- **Arm C** is $\epsilon_{\text{high}}(p) = \epsilon_0\,(1 + c\,(1 - p))$ with $\epsilon_0 = 0.2$ and $c = 1$: a
+- **Arm C** is $\epsilon_{\text{high}}(p) = \epsilon_0 (1 + c(1 - p))$ with $\epsilon_0 = 0.2$ and $c = 1$: a
   confident token ($p \approx 1$) keeps the symmetric upper bound of 1.2, and a rare token ($p \approx 0$) gets up to
   1.4. Setting $c = 0$ recovers arm A.
 - **Arm D** uses DCPO's bounds with $\epsilon_{\text{low}} = 0.16$ and $\epsilon_{\text{high}} = 0.2$. Unlike C,
